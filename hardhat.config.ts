@@ -6,7 +6,16 @@ const config: HardhatUserConfig = {
   solidity: "0.8.17",
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY
-  }
+  },
+  paths: {
+    artifacts: "./rm-dapp/src/artifacts",
+  },
+  defaultNetwork: "hardhat",
+  networks: {
+    hardhat: {
+      chainId: 1337
+    }
+  },
 };
 
 task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
