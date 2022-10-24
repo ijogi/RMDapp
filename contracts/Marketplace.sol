@@ -31,7 +31,7 @@ contract MarketPlace is ReentrancyGuard {
     modifier notListed(address nftAddress, uint256 tokenId) {
         ListedItem memory item = _listedItems[nftAddress][tokenId];
         if (item.price > 0) {
-            revert ItemNotListed(nftAddress, tokenId);
+            revert ItemAlreadyListed(nftAddress, tokenId);
         }
         _;
     }
@@ -39,7 +39,7 @@ contract MarketPlace is ReentrancyGuard {
     modifier isListed(address nftAddress, uint256 tokenId) {
         ListedItem memory item = _listedItems[nftAddress][tokenId];
         if (item.price <= 0) {
-            revert ItemAlreadyListed(nftAddress, tokenId);
+            revert ItemNotListed(nftAddress, tokenId);
         }
         _;
     }
@@ -54,7 +54,7 @@ contract MarketPlace is ReentrancyGuard {
         }
         IERC721 nft = IERC721(nftAddress);
         if (nft.getApproved(tokenId) != address(this)) {
-            revert PriceMustBeAboveZero(price);
+            revert NftNotApprovedForMarketplace(nftAddress, tokenId);
         }
         _listedItems[nftAddress][tokenId] = ListedItem(price, msg.sender);
     }
