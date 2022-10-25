@@ -114,4 +114,38 @@ describe("Marketplace", () => {
     })
   })
 
+  describe("cancelListing", () => {
+    it("Should cancel a listing for token owner", async () => {
+      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft);
+
+      await marketplace.listItem(nftAddress, 0, ethers.utils.parseUnits("1", "ether"))
+
+      expect(await marketplace.cancelListing(nftAddress, 0))
+        .not
+        .to
+        .be
+        .reverted
+    })
+
+    it("Should revert when caller is not token owner", async () => {
+      const { marketplace, nftAddress, otherAccount } = await loadFixture(deployMarketplaceFixtureWithNft);
+
+      await marketplace.listItem(nftAddress, 0, ethers.utils.parseUnits("1", "ether"))
+
+      await expect(marketplace.connect(otherAccount).cancelListing(nftAddress, 0))
+        .to
+        .be
+        .revertedWithCustomError(marketplace, "NotTokenOwner")
+    })
+
+    it("Should revert when NFT is not listed", async () => {
+      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft);
+  
+      await expect(marketplace.cancelListing(nftAddress, 0))
+        .to
+        .be
+        .revertedWithCustomError(marketplace, "ItemNotListed")
+    })
+  })
+
 })
