@@ -10,6 +10,7 @@ error ItemAlreadyListed(address nftAddress, uint256 tokenId);
 error PriceMustBeAboveZero(uint256 price);
 error ValueDoesNotMatchPrice(address nftAddress, uint256 tokenId, uint256 price);
 error NftNotApprovedForMarketplace(address nftAddress, uint256 tokenId);
+error NoSales();
 
 contract MarketPlace is ReentrancyGuard {
     struct ListedItem {
@@ -18,11 +19,12 @@ contract MarketPlace is ReentrancyGuard {
     }
 
     mapping(address => mapping(uint256 => ListedItem)) private _listedItems;
+    mapping(address => uint256) private _sales;
 
-    modifier isTokenOwner(address nftAddress, uint256 tokenId, address initiator) {
+    modifier isTokenOwner(address nftAddress, uint256 tokenId, address caller) {
         IERC721 nft = IERC721(nftAddress);
         address owner = nft.ownerOf(tokenId);
-        if (initiator != owner) {
+        if (caller != owner) {
             revert NotTokenOwner(nftAddress, tokenId);
         }
         _;
@@ -69,8 +71,8 @@ contract MarketPlace is ReentrancyGuard {
         if (msg.value < item.price) {
             revert ValueDoesNotMatchPrice(nftAddress, tokenId, item.price);
         }
-        (bool success, ) = payable(msg.sender).call{value: msg.value}("");
-        require(success, "Transfer failed");
+        // Avoid state changes after external calls
+        _sales[item.seller] += msg.value;
         delete _listedItems[nftAddress][tokenId];
         IERC721(nftAddress).safeTransferFrom(item.seller, msg.sender, tokenId);
     }
@@ -92,5 +94,15 @@ contract MarketPlace is ReentrancyGuard {
             revert PriceMustBeAboveZero(newPrice);
         }
         _listedItems[nftAddress][tokenId].price = newPrice;
+    }
+
+    function withdraw() external {
+        uint256 amount = _sales[msg.sender];
+        if (amount <= 0) {
+            revert NoSales();
+        }
+        _sales[msg.sender] = 0;
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "Transfer failed");
     }
 }

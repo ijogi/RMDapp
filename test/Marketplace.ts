@@ -17,8 +17,11 @@ describe("Marketplace", () => {
     const nftAddress = robotMuralist.address
     const marketplaceAddress = marketplace.address
 
+    // Mint 1st NFT and grant access to Marketplace
     await robotMuralist.safeMint(owner.address, tokenUri)
     await robotMuralist.approve(marketplaceAddress, 0)
+    // Mint 2nd NFT withold approval
+    await robotMuralist.safeMint(owner.address, tokenUri)
 
     return { marketplace, nftAddress, marketplaceAddress, owner, otherAccount, tokenUri }
   }
@@ -33,5 +36,44 @@ describe("Marketplace", () => {
         .be
         .reverted
     })
+
+    it("Should revert when item is already listed", async () => {
+      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft);
+  
+      await marketplace.listItem(nftAddress, 0, ethers.utils.parseUnits("1", "ether"))
+  
+      await expect(marketplace.listItem(nftAddress, 0, ethers.utils.parseUnits("1", "ether")))
+        .to
+        .be
+        .revertedWithCustomError(marketplace, "ItemAlreadyListed")
+    })
+  
+    it("Should revert when function caller is not the owner of the item", async () => {
+      const { marketplace, nftAddress, otherAccount } = await loadFixture(deployMarketplaceFixtureWithNft);
+  
+      await expect(marketplace.connect(otherAccount).listItem(nftAddress, 0, ethers.utils.parseUnits("1", "ether")))
+        .to
+        .be
+        .revertedWithCustomError(marketplace, "NotTokenOwner")
+    })
+  
+    it("Should revert when NFT price is 0 or negative", async () => {
+      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft);
+  
+      await expect(marketplace.listItem(nftAddress, 0, 0))
+        .to
+        .be
+        .revertedWithCustomError(marketplace, "PriceMustBeAboveZero")
+    })
+  
+    it("Should revert when when NFT is not approved for transfer", async () => {
+      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft);
+  
+      await expect(marketplace.listItem(nftAddress, 1, ethers.utils.parseUnits("1", "ether")))
+        .to
+        .be
+        .revertedWithCustomError(marketplace, "NftNotApprovedForMarketplace")
+    })
   })
+
 })
