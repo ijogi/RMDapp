@@ -49,7 +49,7 @@ describe("Marketplace", () => {
     })
   
     it("Should revert when function caller is not the owner of the item", async () => {
-      const { marketplace, nftAddress, otherAccount } = await loadFixture(deployMarketplaceFixtureWithNft);
+      const { marketplace, nftAddress, otherAccount } = await loadFixture(deployMarketplaceFixtureWithNft)
   
       await expect(marketplace.connect(otherAccount).listItem(nftAddress, 0, ethers.utils.parseUnits("1", "ether")))
         .to
@@ -58,7 +58,7 @@ describe("Marketplace", () => {
     })
   
     it("Should revert when NFT price is 0 or negative", async () => {
-      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft);
+      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft)
   
       await expect(marketplace.listItem(nftAddress, 0, 0))
         .to
@@ -67,7 +67,7 @@ describe("Marketplace", () => {
     })
   
     it("Should revert when when NFT is not approved for transfer", async () => {
-      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft);
+      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft)
   
       await expect(marketplace.listItem(nftAddress, 1, ethers.utils.parseUnits("1", "ether")))
         .to
@@ -78,7 +78,7 @@ describe("Marketplace", () => {
 
   describe("buyItem", () => {
     it("Should transfer NFT when price is met", async () => {
-      const { marketplace, robotMuralist, nftAddress, otherAccount } = await loadFixture(deployMarketplaceFixtureWithNft);
+      const { marketplace, robotMuralist, nftAddress, otherAccount } = await loadFixture(deployMarketplaceFixtureWithNft)
 
       await marketplace.listItem(nftAddress, 0, ethers.utils.parseUnits("1", "ether"))
 
@@ -90,7 +90,7 @@ describe("Marketplace", () => {
     })
 
     it("Should revert when value does not match price", async () => {
-      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft);
+      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft)
 
       await marketplace.listItem(nftAddress, 0, ethers.utils.parseUnits("1", "ether"))
   
@@ -103,7 +103,7 @@ describe("Marketplace", () => {
     })
 
     it("Should revert when NFT is not listed", async () => {
-      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft);
+      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft)
   
       await expect(marketplace.buyItem(nftAddress, 0, {
         value: ethers.utils.parseUnits("1", "ether")
@@ -116,7 +116,7 @@ describe("Marketplace", () => {
 
   describe("cancelListing", () => {
     it("Should cancel a listing for token owner", async () => {
-      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft);
+      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft)
 
       await marketplace.listItem(nftAddress, 0, ethers.utils.parseUnits("1", "ether"))
 
@@ -128,7 +128,7 @@ describe("Marketplace", () => {
     })
 
     it("Should revert when caller is not token owner", async () => {
-      const { marketplace, nftAddress, otherAccount } = await loadFixture(deployMarketplaceFixtureWithNft);
+      const { marketplace, nftAddress, otherAccount } = await loadFixture(deployMarketplaceFixtureWithNft)
 
       await marketplace.listItem(nftAddress, 0, ethers.utils.parseUnits("1", "ether"))
 
@@ -139,9 +139,44 @@ describe("Marketplace", () => {
     })
 
     it("Should revert when NFT is not listed", async () => {
-      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft);
+      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft)
   
       await expect(marketplace.cancelListing(nftAddress, 0))
+        .to
+        .be
+        .revertedWithCustomError(marketplace, "ItemNotListed")
+    })
+  })
+
+  describe("updateItemPrice", () => {
+    it("Should allow token owner to update it's price", async () => {
+      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft)
+      const newPrice = ethers.utils.parseUnits("2", "ether")
+
+      await marketplace.listItem(nftAddress, 0, ethers.utils.parseUnits("1", "ether"))
+      await marketplace.updateItemPrice(nftAddress, 0, newPrice)
+      const item = await marketplace.getListedItem(nftAddress, 0)
+
+      expect(item.price).to.equal(newPrice)
+    })
+
+    it("Should revert when caller is not token owner", async () => {
+      const { marketplace, nftAddress, otherAccount } = await loadFixture(deployMarketplaceFixtureWithNft)
+      const newPrice = ethers.utils.parseUnits("2", "ether")
+
+      await marketplace.listItem(nftAddress, 0, ethers.utils.parseUnits("1", "ether"))
+
+      await expect(marketplace.connect(otherAccount).updateItemPrice(nftAddress, 0, newPrice))
+        .to
+        .be
+        .revertedWithCustomError(marketplace, "NotTokenOwner")
+    })
+
+    it("Should revert when NFT is not listed", async () => {
+      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft)
+      const newPrice = ethers.utils.parseUnits("2", "ether")
+  
+      await expect(marketplace.updateItemPrice(nftAddress, 0, newPrice))
         .to
         .be
         .revertedWithCustomError(marketplace, "ItemNotListed")

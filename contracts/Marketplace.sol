@@ -71,9 +71,13 @@ contract MarketPlace is ReentrancyGuard {
         if (msg.value < item.price) {
             revert ValueDoesNotMatchPrice(nftAddress, tokenId, item.price);
         }
+        // Avoid state changes after external calls
         _sales[item.seller] += msg.value;
         delete _listedItems[nftAddress][tokenId];
         IERC721(nftAddress).safeTransferFrom(item.seller, msg.sender, tokenId);
+        // Call the external function only when internal processes are done
+        (bool success, ) = payable(msg.sender).call{value: msg.value}("");
+        require(success, "Transfer failed");
     }
 
     function cancelListing(address nftAddress, uint256 tokenId) 
@@ -103,5 +107,13 @@ contract MarketPlace is ReentrancyGuard {
         _sales[msg.sender] = 0;
         (bool success, ) = payable(msg.sender).call{value: amount}("");
         require(success, "Transfer failed");
+    }
+
+    function getListedItem(address nftAddress, uint256 tokenId) 
+        external 
+        view 
+        returns (ListedItem memory)
+    {
+      return _listedItems[nftAddress][tokenId];
     }
 }
