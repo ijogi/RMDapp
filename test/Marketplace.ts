@@ -23,7 +23,7 @@ describe("Marketplace", () => {
     // Mint 2nd NFT withold approval
     await robotMuralist.safeMint(owner.address, tokenUri)
 
-    return { marketplace, nftAddress, marketplaceAddress, owner, otherAccount, tokenUri }
+    return { marketplace, robotMuralist, nftAddress, marketplaceAddress, owner, otherAccount, tokenUri }
   }
 
   describe("listItem", () => {
@@ -73,6 +73,44 @@ describe("Marketplace", () => {
         .to
         .be
         .revertedWithCustomError(marketplace, "NftNotApprovedForMarketplace")
+    })
+  })
+
+  describe("buyItem", () => {
+    it("Should transfer NFT when price is met", async () => {
+      const { marketplace, robotMuralist, nftAddress, otherAccount } = await loadFixture(deployMarketplaceFixtureWithNft);
+
+      await marketplace.listItem(nftAddress, 0, ethers.utils.parseUnits("1", "ether"))
+
+      await marketplace.connect(otherAccount).buyItem(nftAddress, 0, {
+        value: ethers.utils.parseUnits("1", "ether")
+      })
+
+      expect(await robotMuralist.balanceOf(otherAccount.address)).to.equal(1)
+    })
+
+    it("Should revert when value does not match price", async () => {
+      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft);
+
+      await marketplace.listItem(nftAddress, 0, ethers.utils.parseUnits("1", "ether"))
+  
+      await expect(marketplace.buyItem(nftAddress, 0, {
+        value: ethers.utils.parseUnits("0.33", "ether")
+      }))
+        .to
+        .be
+        .revertedWithCustomError(marketplace, "ValueDoesNotMatchPrice")
+    })
+
+    it("Should revert when NFT is not listed", async () => {
+      const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft);
+  
+      await expect(marketplace.buyItem(nftAddress, 0, {
+        value: ethers.utils.parseUnits("1", "ether")
+      }))
+        .to
+        .be
+        .revertedWithCustomError(marketplace, "ItemNotListed")
     })
   })
 

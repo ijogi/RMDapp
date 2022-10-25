@@ -71,7 +71,6 @@ contract MarketPlace is ReentrancyGuard {
         if (msg.value < item.price) {
             revert ValueDoesNotMatchPrice(nftAddress, tokenId, item.price);
         }
-        // Avoid state changes after external calls
         _sales[item.seller] += msg.value;
         delete _listedItems[nftAddress][tokenId];
         IERC721(nftAddress).safeTransferFrom(item.seller, msg.sender, tokenId);
