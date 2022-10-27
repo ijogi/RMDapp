@@ -3,6 +3,7 @@ import { ethers } from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 
 describe("Marketplace", () => {
+
   async function deployMarketplaceFixtureWithNft() {
     // Contracts are deployed using the first signer/account by default
     const [owner, otherAccount] = await ethers.getSigners()
@@ -27,6 +28,7 @@ describe("Marketplace", () => {
   }
 
   describe("listItem", () => {
+
     it("Should list a valid item", async () => {
       const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft)
 
@@ -77,6 +79,7 @@ describe("Marketplace", () => {
   })
 
   describe("buyItem", () => {
+
     it("Should transfer NFT when price is met", async () => {
       const { marketplace, robotMuralist, nftAddress, otherAccount } = await loadFixture(deployMarketplaceFixtureWithNft)
 
@@ -115,6 +118,7 @@ describe("Marketplace", () => {
   })
 
   describe("cancelListing", () => {
+
     it("Should cancel a listing for token owner", async () => {
       const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft)
 
@@ -149,6 +153,7 @@ describe("Marketplace", () => {
   })
 
   describe("updateItemPrice", () => {
+  
     it("Should allow token owner to update it's price", async () => {
       const { marketplace, nftAddress } = await loadFixture(deployMarketplaceFixtureWithNft)
       const newPrice = ethers.utils.parseUnits("2", "ether")
@@ -180,6 +185,28 @@ describe("Marketplace", () => {
         .to
         .be
         .revertedWithCustomError(marketplace, "ItemNotListed")
+    })
+  })
+
+  describe("withdraw", () => {
+
+    it("Should allow to withdraw proceeds from the sale", async () => {
+      const { marketplace, nftAddress, otherAccount, owner } = await loadFixture(deployMarketplaceFixtureWithNft)
+
+      await marketplace.listItem(nftAddress, 0, ethers.utils.parseUnits("1", "ether"))
+      await marketplace.connect(otherAccount).buyItem(nftAddress, 0, {
+        value: ethers.utils.parseUnits("1", "ether")
+      })
+      const balance = await otherAccount.getBalance()
+      await marketplace.withdraw()
+
+      expect(await owner.getBalance()).to.be.greaterThanOrEqual(balance.add(ethers.utils.parseUnits("1", "ether")).toString()).to.not.be.reverted
+    })
+
+    it("Should revert if there are no sales proceeds", async () => {
+      const { marketplace } = await loadFixture(deployMarketplaceFixtureWithNft)
+
+      await expect(marketplace.withdraw()).to.be.revertedWithCustomError(marketplace, "NoSales")
     })
   })
 
