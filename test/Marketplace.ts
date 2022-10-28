@@ -15,6 +15,9 @@ describe("Marketplace", () => {
     const Marketplace = await ethers.getContractFactory("MarketPlace")
     const marketplace = await Marketplace.deploy()
 
+    const ERC1155Token = await ethers.getContractFactory("MyToken")
+    const erc1155Token = await ERC1155Token.deploy()
+
     const nftAddress = robotMuralist.address
     const marketplaceAddress = marketplace.address
 
@@ -24,7 +27,16 @@ describe("Marketplace", () => {
     // Mint 2nd NFT withold approval
     await robotMuralist.safeMint(owner.address, tokenUri)
 
-    return { marketplace, robotMuralist, nftAddress, marketplaceAddress, owner, otherAccount, tokenUri }
+    return {
+      marketplace,
+      robotMuralist,
+      nftAddress,
+      marketplaceAddress,
+      owner,
+      otherAccount,
+      tokenUri,
+      erc1155Token,
+    }
   }
 
   describe("listItem", () => {
@@ -48,6 +60,15 @@ describe("Marketplace", () => {
         .to
         .be
         .revertedWithCustomError(marketplace, "ItemAlreadyListed")
+    })
+
+    it("Should revert if not address is not an ERC721 NFT", async () => {
+      const { marketplace, erc1155Token } = await loadFixture(deployMarketplaceFixtureWithNft);
+  
+      await expect(marketplace.listItem(erc1155Token.address, 0, ethers.utils.parseUnits("1", "ether")))
+        .to
+        .be
+        .revertedWithCustomError(marketplace, "ERC721NotImplemented")
     })
   
     it("Should revert when function caller is not the owner of the item", async () => {

@@ -11,18 +11,27 @@ error PriceMustBeAboveZero(uint256 price);
 error ValueDoesNotMatchPrice(address nftAddress, uint256 tokenId, uint256 price);
 error NftNotApprovedForMarketplace(address nftAddress, uint256 tokenId);
 error NoSales();
+error ERC721NotImplemented(address nftAddress, uint256 tokenId);
 
+/// @title MarketPlace
+/// @author Indrek Jõgi
+/// @notice NFT Marketplace Smart Contract created for education purposes
 contract MarketPlace is ReentrancyGuard {
     struct ListedItem {
         uint256 price;
         address seller;
     }
 
+    bytes4 private constant INTERFACE_ID_ERC721 = 0x80ac58cd;
+
     mapping(address => mapping(uint256 => ListedItem)) private _listedItems;
     mapping(address => uint256) private _sales;
 
     modifier isTokenOwner(address nftAddress, uint256 tokenId, address caller) {
         IERC721 nft = IERC721(nftAddress);
+        if (!nft.supportsInterface(INTERFACE_ID_ERC721)) {
+          revert ERC721NotImplemented(nftAddress, tokenId);
+        }
         address owner = nft.ownerOf(tokenId);
         if (caller != owner) {
             revert NotTokenOwner(nftAddress, tokenId);
@@ -47,7 +56,7 @@ contract MarketPlace is ReentrancyGuard {
     }
 
     function listItem(address nftAddress, uint256 tokenId, uint256 price) 
-        external 
+        external
         notListed(nftAddress, tokenId) 
         isTokenOwner(nftAddress, tokenId, msg.sender) 
     {
@@ -95,7 +104,7 @@ contract MarketPlace is ReentrancyGuard {
         _listedItems[nftAddress][tokenId].price = newPrice;
     }
 
-    function withdraw() external payable {
+    function withdraw() external {
         uint256 amount = _sales[msg.sender];
         if (amount <= 0) {
             revert NoSales();
@@ -112,11 +121,4 @@ contract MarketPlace is ReentrancyGuard {
     {
       return _listedItems[nftAddress][tokenId];
     }
-
-    function getAvailableProceeds(address seller)
-      external
-      view
-      returns (uint256 proceeds) {
-        return _sales[seller];
-      }
 }
