@@ -15,12 +15,44 @@ error ERC721NotImplemented(address nftAddress, uint256 tokenId);
 
 /// @title MarketPlace
 /// @author Indrek Jõgi
-/// @notice NFT Marketplace Smart Contract created for education purposes
+/// @notice NFT Marketplace Smart Contract created for educational purposes
 contract MarketPlace is ReentrancyGuard {
     struct ListedItem {
         uint256 price;
         address seller;
     }
+
+    event ItemListed(
+      address indexed owner,
+      address indexed nftAddress,
+      uint256 tokenId, 
+      uint256 price
+    );
+
+    event ItemBought(
+      address indexed buyer,
+      address indexed nftAddress,
+      uint256 tokenId, 
+      uint256 price
+    );
+
+    event ListingCancelled(
+      address indexed owner,
+      address indexed nftAddress,
+      uint256 tokenId
+    );
+
+    event PriceUpdated(
+      address indexed buyer,
+      address indexed nftAddress,
+      uint256 tokenId, 
+      uint256 newPrice
+    );
+
+    event FundsWithdrawn(
+      address indexed seller,
+      uint256 amount
+    );
 
     bytes4 private constant INTERFACE_ID_ERC721 = 0x80ac58cd;
 
@@ -74,6 +106,7 @@ contract MarketPlace is ReentrancyGuard {
             revert NftNotApprovedForMarketplace(nftAddress, tokenId);
         }
         _listedItems[nftAddress][tokenId] = ListedItem(price, msg.sender);
+        emit ItemListed(msg.sender, nftAddress, tokenId, price);
     }
 
     /// @notice buyItem transfers purchased NFT to buyers account 
@@ -92,6 +125,7 @@ contract MarketPlace is ReentrancyGuard {
         _sales[item.seller] += msg.value;
         delete _listedItems[nftAddress][tokenId];
         IERC721(nftAddress).safeTransferFrom(item.seller, msg.sender, tokenId);
+        emit ItemBought(msg.sender, nftAddress, tokenId, item.price);
     }
 
     /// @notice cancelListing delists an NFT for sale 
@@ -103,6 +137,7 @@ contract MarketPlace is ReentrancyGuard {
         isListed(nftAddress, tokenId)
     {
         delete _listedItems[nftAddress][tokenId];
+        emit ListingCancelled(msg.sender, nftAddress, tokenId);
     }
 
     /// @notice cancelListing delists an NFT for sale 
@@ -118,6 +153,7 @@ contract MarketPlace is ReentrancyGuard {
             revert PriceMustBeAboveZero(newPrice);
         }
         _listedItems[nftAddress][tokenId].price = newPrice;
+        emit PriceUpdated(msg.sender, nftAddress, tokenId, newPrice);
     }
 
     /// @notice withdraw send sale proceedes to the seller 
@@ -129,6 +165,7 @@ contract MarketPlace is ReentrancyGuard {
         _sales[msg.sender] = 0;
         (bool success, ) = payable(msg.sender).call{value: amount}("");
         require(success, "Transfer failed");
+        emit FundsWithdrawn(msg.sender, amount);
     }
 
     /// @notice getListedItem shows details of a listed item 
