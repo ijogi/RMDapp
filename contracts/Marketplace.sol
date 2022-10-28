@@ -55,6 +55,12 @@ contract MarketPlace is ReentrancyGuard {
         _;
     }
 
+    /// @notice listItem takes an approved NFT and lists it for sale and
+    /// @notice Only the owner of an approved NFT can list an unlisted NFT
+    /// @dev Doesn't currently implement the ERC1155 standard
+    /// @param nftAddress The address of the NFT contract where the item belongs to
+    /// @param tokenId Token ID of the individual NFT in the collection
+    /// @param price The selling price for the NFT in Wei
     function listItem(address nftAddress, uint256 tokenId, uint256 price) 
         external
         notListed(nftAddress, tokenId) 
@@ -70,6 +76,9 @@ contract MarketPlace is ReentrancyGuard {
         _listedItems[nftAddress][tokenId] = ListedItem(price, msg.sender);
     }
 
+    /// @notice buyItem transfers purchased NFT to buyers account 
+    /// @param nftAddress The address of the NFT contract where the item belongs to
+    /// @param tokenId Token ID of the individual NFT in the collection
     function buyItem(address nftAddress, uint256 tokenId)
         external 
         payable 
@@ -85,6 +94,9 @@ contract MarketPlace is ReentrancyGuard {
         IERC721(nftAddress).safeTransferFrom(item.seller, msg.sender, tokenId);
     }
 
+    /// @notice cancelListing delists an NFT for sale 
+    /// @param nftAddress The address of the NFT contract where the item belongs to
+    /// @param tokenId Token ID of the individual NFT in the collection
     function cancelListing(address nftAddress, uint256 tokenId) 
         external 
         isTokenOwner(nftAddress, tokenId, msg.sender)
@@ -93,6 +105,10 @@ contract MarketPlace is ReentrancyGuard {
         delete _listedItems[nftAddress][tokenId];
     }
 
+    /// @notice cancelListing delists an NFT for sale 
+    /// @param nftAddress The address of the NFT contract where the item belongs to
+    /// @param tokenId Token ID of the individual NFT in the collection
+    /// @param newPrice New price for the NFT
     function updateItemPrice(address nftAddress, uint256 tokenId, uint256 newPrice) 
         external 
         isTokenOwner(nftAddress, tokenId, msg.sender) 
@@ -104,6 +120,7 @@ contract MarketPlace is ReentrancyGuard {
         _listedItems[nftAddress][tokenId].price = newPrice;
     }
 
+    /// @notice withdraw send sale proceedes to the seller 
     function withdraw() external {
         uint256 amount = _sales[msg.sender];
         if (amount <= 0) {
@@ -114,6 +131,10 @@ contract MarketPlace is ReentrancyGuard {
         require(success, "Transfer failed");
     }
 
+    /// @notice getListedItem shows details of a listed item 
+    /// @param nftAddress The address of the NFT contract where the item belongs to
+    /// @param tokenId Token ID of the individual NFT in the collection
+    /// @return ListedItem containing price and seller's address
     function getListedItem(address nftAddress, uint256 tokenId) 
         external 
         view 
