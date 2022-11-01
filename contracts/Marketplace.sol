@@ -2,6 +2,7 @@
 pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/interfaces/IERC2981.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 error NotTokenOwner(address nftAddress, uint256 tokenId);
@@ -12,14 +13,19 @@ error ValueDoesNotMatchPrice(address nftAddress, uint256 tokenId, uint256 price)
 error NftNotApprovedForMarketplace(address nftAddress, uint256 tokenId);
 error NoSales();
 error ERC721NotImplemented(address nftAddress, uint256 tokenId);
+error UnpaidRoyalties();
 
 /// @title MarketPlace
-/// @author Indrek Jõgi
 /// @notice NFT Marketplace Smart Contract created for educational purposes
 contract MarketPlace is ReentrancyGuard {
     struct ListedItem {
         uint256 price;
         address seller;
+    }
+
+    struct Royalty {
+      address receiver;
+      uint256 amount;
     }
 
     event ItemListed(
@@ -54,14 +60,16 @@ contract MarketPlace is ReentrancyGuard {
       uint256 amount
     );
 
-    bytes4 private constant INTERFACE_ID_ERC721 = 0x80ac58cd;
+    bytes4 private constant _INTERFACE_ID_ERC721 = 0x80ac58cd;
+    bytes4 private constant _INTERFACE_ID_ERC2981 = 0x2a55205a;
 
     mapping(address => mapping(uint256 => ListedItem)) private _listedItems;
     mapping(address => uint256) private _sales;
+    mapping(address => Royalty[]) private _registeredRoyalties;
 
     modifier isTokenOwner(address nftAddress, uint256 tokenId, address caller) {
         IERC721 nft = IERC721(nftAddress);
-        if (!nft.supportsInterface(INTERFACE_ID_ERC721)) {
+        if (!nft.supportsInterface(_INTERFACE_ID_ERC721)) {
           revert ERC721NotImplemented(nftAddress, tokenId);
         }
         address owner = nft.ownerOf(tokenId);
@@ -83,6 +91,14 @@ contract MarketPlace is ReentrancyGuard {
         ListedItem memory item = _listedItems[nftAddress][tokenId];
         if (item.price <= 0) {
             revert ItemNotListed(nftAddress, tokenId);
+        }
+        _;
+    }
+
+    modifier royaltiesPaid() {
+        Royalty[] memory royaltiesForSeller = _registeredRoyalties[msg.sender];
+        if (royaltiesForSeller.length > 0) {
+            revert UnpaidRoyalties();
         }
         _;
     }
@@ -122,7 +138,8 @@ contract MarketPlace is ReentrancyGuard {
         if (msg.value < item.price) {
             revert ValueDoesNotMatchPrice(nftAddress, tokenId, item.price);
         }
-        _sales[item.seller] += msg.value;
+        uint256 royaltyProceeds = _registerRoyalty(nftAddress, tokenId, item.price);
+        _sales[item.seller] += msg.value - royaltyProceeds;
         delete _listedItems[nftAddress][tokenId];
         IERC721(nftAddress).safeTransferFrom(item.seller, msg.sender, tokenId);
         emit ItemBought(msg.sender, nftAddress, tokenId, item.price);
@@ -157,7 +174,7 @@ contract MarketPlace is ReentrancyGuard {
     }
 
     /// @notice withdraw send sale proceedes to the seller 
-    function withdraw() external {
+    function withdraw() external royaltiesPaid {
         uint256 amount = _sales[msg.sender];
         if (amount <= 0) {
             revert NoSales();
@@ -166,6 +183,17 @@ contract MarketPlace is ReentrancyGuard {
         (bool success, ) = payable(msg.sender).call{value: amount}("");
         require(success, "Transfer failed");
         emit FundsWithdrawn(msg.sender, amount);
+    }
+
+    function payRoyalties() external {
+        Royalty[] storage royaltiesForSeller = _registeredRoyalties[msg.sender];
+        for (uint256 i = 0; i < royaltiesForSeller.length; i++) {
+            address receiver = royaltiesForSeller[i].receiver;
+            uint256 amount = royaltiesForSeller[i].amount;
+            delete royaltiesForSeller[i];
+            (bool success, ) = payable(receiver).call{value: amount}("");
+            require(success, "Transfer failed");
+        }
     }
 
     /// @notice getListedItem shows details of a listed item 
@@ -177,6 +205,31 @@ contract MarketPlace is ReentrancyGuard {
         view 
         returns (ListedItem memory)
     {
-      return _listedItems[nftAddress][tokenId];
+        return _listedItems[nftAddress][tokenId];
+    }
+
+    /// @notice getAvailableProceeds returns available sales proceeds
+    /// @return The amount of available proceeds
+    function getAvailableProceeds()
+        external
+        view
+        returns (uint256) 
+    {
+        return _sales[msg.sender];
+    }
+
+    function _registerRoyalty(address nftAddress, uint256 tokenId, uint256 salePrice) private returns (uint256) {
+        address receiver = address(0);
+        uint256 royaltyAmount = 0;
+        IERC2981 nftWithRoyalties = IERC2981(nftAddress);
+        if (nftWithRoyalties.supportsInterface(_INTERFACE_ID_ERC2981)) {
+            (receiver, royaltyAmount) = nftWithRoyalties.royaltyInfo(tokenId, salePrice);
+            if (royaltyAmount > 0) {
+                Royalty[] storage royaltiesForSeller = _registeredRoyalties[msg.sender];
+                royaltiesForSeller.push(Royalty(receiver, royaltyAmount));
+                _registeredRoyalties[msg.sender] = royaltiesForSeller;
+            }
+        }
+        return royaltyAmount;
     }
 }

@@ -4,10 +4,11 @@ pragma solidity ^0.8.4;
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Royalty.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 
-contract RobotMuralist is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
+contract RobotMuralist is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Royalty, Ownable {
     using Counters for Counters.Counter;
 
     Counters.Counter private _tokenIdCounter;
@@ -30,7 +31,7 @@ contract RobotMuralist is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
         super._beforeTokenTransfer(from, to, tokenId);
     }
 
-    function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) {
+    function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage, ERC721Royalty) {
         super._burn(tokenId);
     }
 
@@ -46,9 +47,16 @@ contract RobotMuralist is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
     function supportsInterface(bytes4 interfaceId)
         public
         view
-        override(ERC721, ERC721Enumerable)
+        override(ERC721, ERC721Enumerable, ERC721Royalty)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
+    }
+
+    function setTokenRoyalty(uint256 tokenId, address receiver, uint96 feeNumerator)
+        public
+        onlyOwner 
+    {
+        _setTokenRoyalty(tokenId, receiver, feeNumerator);
     }
 }
