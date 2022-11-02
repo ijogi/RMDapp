@@ -46,4 +46,19 @@ describe("RobotMuralist", () => {
       expect(await robotMuralist.tokenURI(0)).to.equal(tokenUri)
     })
   })
+
+  describe("setTokenRoyalty", () => {
+
+    it("Should set token royalty info", async () => {
+      const { robotMuralist, owner, otherAccount, tokenUri } = await loadFixture(deployRobotMuralistFixture)
+
+      await robotMuralist.safeMint(owner.address, tokenUri)
+      await robotMuralist.setTokenRoyalty(0, otherAccount.address, 1000)
+      const [receiver, amount] = await robotMuralist.royaltyInfo(0, 100)
+
+      expect(receiver).to.equal(otherAccount.address)
+      expect(amount).to.equal(ethers.BigNumber.from("10"))
+    })
+
+  })
 })
