@@ -11,9 +11,9 @@ error ItemAlreadyListed(address nftAddress, uint256 tokenId);
 error PriceMustBeAboveZero(uint256 price);
 error ValueDoesNotMatchPrice(address nftAddress, uint256 tokenId, uint256 price);
 error NftNotApprovedForMarketplace(address nftAddress, uint256 tokenId);
-error NoSales();
 error ERC721NotImplemented(address nftAddress, uint256 tokenId);
 error UnpaidRoyalties();
+error NoSales();
 
 /// @title MarketPlace
 /// @notice NFT Marketplace Smart Contract created for educational purposes
@@ -26,6 +26,7 @@ contract MarketPlace is ReentrancyGuard {
     struct Royalty {
       address receiver;
       uint256 amount;
+      uint256 tokenId;
     }
 
     event ItemListed(
@@ -58,6 +59,18 @@ contract MarketPlace is ReentrancyGuard {
     event FundsWithdrawn(
       address indexed seller,
       uint256 amount
+    );
+
+    event RoyaltyRegistered(
+        address indexed nftAddress,
+        address indexed receiver,
+        uint256 tokenId,
+        uint256 amount
+    );
+
+    event RoyaltyPaid(
+        address indexed receiver,
+        uint256 amount
     );
 
     bytes4 private constant _INTERFACE_ID_ERC721 = 0x80ac58cd;
@@ -125,7 +138,8 @@ contract MarketPlace is ReentrancyGuard {
         emit ItemListed(msg.sender, nftAddress, tokenId, price);
     }
 
-    /// @notice buyItem transfers purchased NFT to buyers account 
+    /// @notice buyItem transfers purchased NFT to buyers account
+    /// @dev Moving the royalties registration here helps to avoid dealing with keeping royalty operations in sync with item cancellations and price updates
     /// @param nftAddress The address of the NFT contract where the item belongs to
     /// @param tokenId Token ID of the individual NFT in the collection
     function buyItem(address nftAddress, uint256 tokenId)
@@ -173,7 +187,8 @@ contract MarketPlace is ReentrancyGuard {
         emit PriceUpdated(msg.sender, nftAddress, tokenId, newPrice);
     }
 
-    /// @notice withdraw send sale proceedes to the seller 
+    /// @notice withdraw send sale proceedes to the seller
+    /// @notice Requires that existing royalties be paid out before claiming proceeds
     function withdraw() external royaltiesPaid {
         uint256 amount = _sales[msg.sender];
         if (amount <= 0) {
@@ -185,6 +200,7 @@ contract MarketPlace is ReentrancyGuard {
         emit FundsWithdrawn(msg.sender, amount);
     }
 
+    /// @notice payRoyalties loops over all royalty payments for a seller and transfers funds
     function payRoyalties() external {
         Royalty[] storage royaltiesForSeller = _registeredRoyalties[msg.sender];
         for (uint256 i = 0; i < royaltiesForSeller.length; i++) {
@@ -193,6 +209,7 @@ contract MarketPlace is ReentrancyGuard {
             delete royaltiesForSeller[i];
             (bool success, ) = payable(receiver).call{value: amount}("");
             require(success, "Transfer failed");
+            emit RoyaltyPaid(receiver, amount);
         }
     }
 
@@ -218,6 +235,12 @@ contract MarketPlace is ReentrancyGuard {
         return _sales[msg.sender];
     }
 
+    /// @notice _registerRoyalty adds royalty information for later payouts
+    /// @dev royalty info is retrieved from the NFT contract if it implements ERC2981
+    /// @param nftAddress The address of the NFT contract where the item belongs to
+    /// @param tokenId Token ID of the individual NFT in the collection
+    /// @param salePrice The price of the NFT
+    /// @return The royalty amount that needs to be paid based on the price and seller fee basis points
     function _registerRoyalty(address nftAddress, uint256 tokenId, uint256 salePrice) private returns (uint256) {
         address receiver = address(0);
         uint256 royaltyAmount = 0;
@@ -226,8 +249,9 @@ contract MarketPlace is ReentrancyGuard {
             (receiver, royaltyAmount) = nftWithRoyalties.royaltyInfo(tokenId, salePrice);
             if (royaltyAmount > 0) {
                 Royalty[] storage royaltiesForSeller = _registeredRoyalties[msg.sender];
-                royaltiesForSeller.push(Royalty(receiver, royaltyAmount));
+                royaltiesForSeller.push(Royalty(receiver, royaltyAmount, tokenId));
                 _registeredRoyalties[msg.sender] = royaltiesForSeller;
+                emit RoyaltyRegistered(nftAddress, receiver, tokenId, royaltyAmount);
             }
         }
         return royaltyAmount;

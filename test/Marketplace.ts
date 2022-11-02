@@ -6,7 +6,7 @@ describe("Marketplace", () => {
 
   async function deployMarketplaceFixtureWithNft() {
     // Contracts are deployed using the first signer/account by default
-    const [owner, otherAccount] = await ethers.getSigners()
+    const [owner, otherAccount, royaltyAccount] = await ethers.getSigners()
     const tokenUri = "https://ipfs.io/ipfs/smth"
 
     const RobotMuralist = await ethers.getContractFactory("RobotMuralist")
@@ -22,11 +22,19 @@ describe("Marketplace", () => {
     const marketplaceAddress = marketplace.address
     const price1Eth = ethers.utils.parseUnits("1", "ether")
 
+    const tokenIdApproved = 0
+    const tokenIdUnapproved = 1
+    const tokenIdRoyalties = 2
+
     // Mint 1st NFT and grant access to Marketplace
     await robotMuralist.safeMint(owner.address, tokenUri)
-    await robotMuralist.approve(marketplaceAddress, 0)
+    await robotMuralist.approve(marketplaceAddress, tokenIdApproved)
     // Mint 2nd NFT withold approval
     await robotMuralist.safeMint(owner.address, tokenUri)
+    // Mint 3rd NFT with approval and royalties
+    await robotMuralist.safeMint(owner.address, tokenUri)
+    await robotMuralist.setTokenRoyalty(tokenIdRoyalties, royaltyAccount.address, 10000)
+    await robotMuralist.approve(marketplaceAddress, tokenIdRoyalties)
 
     return {
       marketplace,
@@ -35,9 +43,13 @@ describe("Marketplace", () => {
       marketplaceAddress,
       owner,
       otherAccount,
+      royaltyAccount,
       tokenUri,
       erc1155Token,
-      price1Eth
+      price1Eth,
+      tokenIdApproved,
+      tokenIdUnapproved,
+      tokenIdRoyalties,
     }
   }
 
@@ -46,7 +58,7 @@ describe("Marketplace", () => {
     it("Should list a valid item and emit ItemListed event", async () => {
       const { marketplace, nftAddress, owner, price1Eth } = await loadFixture(deployMarketplaceFixtureWithNft)
 
-      expect(await marketplace.listItem(nftAddress, 0, price1Eth))
+      await expect(marketplace.listItem(nftAddress, 0, price1Eth))
         .to
         .emit(marketplace, "ItemListed")
         .withArgs(owner.address, nftAddress, 0, price1Eth)
@@ -113,10 +125,10 @@ describe("Marketplace", () => {
 
       await marketplace.listItem(nftAddress, 0, price1Eth)
 
-      expect(await marketplace.connect(otherAccount).buyItem(nftAddress, 0, {
+      await expect(marketplace.connect(otherAccount).buyItem(nftAddress, 0, {
         value: price1Eth
       }))
-        .emit(marketplace, "ItemListed")
+        .emit(marketplace, "ItemBought")
         .withArgs(otherAccount.address, nftAddress, 0, price1Eth)
 
       expect(await robotMuralist.balanceOf(otherAccount.address)).to.equal(1)
@@ -154,7 +166,7 @@ describe("Marketplace", () => {
 
       await marketplace.listItem(nftAddress, 0, price1Eth)
 
-      expect(await marketplace.cancelListing(nftAddress, 0))
+      await expect(marketplace.cancelListing(nftAddress, 0))
         .to
         .emit(marketplace, "ListingCancelled")
         .withArgs(owner.address, nftAddress, 0)
@@ -188,7 +200,7 @@ describe("Marketplace", () => {
       const newPrice = ethers.utils.parseUnits("2", "ether")
 
       await marketplace.listItem(nftAddress, 0, price1Eth)
-      expect(await marketplace.updateItemPrice(nftAddress, 0, newPrice))
+      await expect(marketplace.updateItemPrice(nftAddress, 0, newPrice))
         .to
         .emit(marketplace, "PriceUpdated")
         .withArgs(owner.address, nftAddress, 0, newPrice)
@@ -237,10 +249,10 @@ describe("Marketplace", () => {
       })
       const balance = await otherAccount.getBalance()
 
-      expect(await marketplace.withdraw())
+      await expect(marketplace.withdraw())
         .to
         .emit(marketplace, "FundsWithdrawn")
-        .withArgs(owner.address, await owner.getBalance())
+        .withArgs(owner.address, price1Eth)
 
       expect(await owner.getBalance())
         .to
@@ -252,6 +264,40 @@ describe("Marketplace", () => {
       const { marketplace } = await loadFixture(deployMarketplaceFixtureWithNft)
 
       await expect(marketplace.withdraw()).to.be.revertedWithCustomError(marketplace, "NoSales")
+    })
+
+    it("Should revert if there are unpaid royalties", async () => {
+      const {
+        marketplace,
+        nftAddress,
+        price1Eth,
+        tokenIdRoyalties
+      } = await loadFixture(deployMarketplaceFixtureWithNft)
+
+      await marketplace.listItem(nftAddress, tokenIdRoyalties, price1Eth)
+      await marketplace.buyItem(nftAddress, tokenIdRoyalties, { value: price1Eth })
+
+      await expect(marketplace.withdraw()).to.be.revertedWithCustomError(marketplace, "UnpaidRoyalties")
+    })
+  })
+
+  describe("payRoyalties", () => {
+    it("Should pay out any outstanding royalties", async () => {
+      const {
+        marketplace,
+        nftAddress,
+        royaltyAccount,
+        price1Eth,
+        tokenIdRoyalties
+      } = await loadFixture(deployMarketplaceFixtureWithNft)
+
+      await marketplace.listItem(nftAddress, tokenIdRoyalties, price1Eth)
+      await marketplace.buyItem(nftAddress, tokenIdRoyalties, { value: price1Eth })
+
+      await expect(marketplace.payRoyalties())
+        .to
+        .emit(marketplace, "RoyaltyPaid")
+        .withArgs(royaltyAccount.address, 1000000000000000000n)
     })
   })
 

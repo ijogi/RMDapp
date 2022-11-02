@@ -57,6 +57,6 @@ contract RobotMuralist is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Roya
         public
         onlyOwner 
     {
-        _setTokenRoyalty(tokenId, receiver, feeNumerator);
+        super._setTokenRoyalty(tokenId, receiver, feeNumerator);
     }
 }
